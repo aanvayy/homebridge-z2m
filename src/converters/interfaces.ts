@@ -7,6 +7,8 @@ export interface BasicAccessory {
 
   displayName: string;
 
+  matchesDeviceModel(...models: string[]): boolean;
+
   getDefaultServiceDisplayName(subType: string | undefined): string;
 
   getOrAddService(service: Service): Service;

@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'vitest';
-import { AIR_QUALITY_ACCESSORY_ROLE, deviceForAccessoryRole, shouldSplitStarkvindAirQuality } from '../src/purifierAccessorySplit';
+import {
+  AIR_QUALITY_ACCESSORY_ROLE,
+  deviceForAccessoryRole,
+  exposesForAccessoryRole,
+  shouldSplitStarkvindAirQuality,
+} from '../src/purifierAccessorySplit';
 import { DeviceListEntry, ExposesEntry } from '../src/z2mModels';
 import { loadExposesFromFile } from './testHelpers';
 
@@ -42,6 +47,20 @@ describe('STARKVIND accessory split', () => {
     const sensor = deviceForAccessoryRole(device, AIR_QUALITY_ACCESSORY_ROLE);
 
     expect(sensor.definition?.exposes.map((entry) => entry.name)).toEqual(['pm25', 'air_quality']);
+  });
+
+  test('keeps configured exposes separated by accessory role', () => {
+    const device = starkvindDevice(loadExposesFromFile('ikea/e2007.json'));
+    const configuredExposes = device.definition?.exposes ?? [];
+
+    const primaryNames = exposesForAccessoryRole(device, configuredExposes).map((entry) => entry.name);
+    const sensorNames = exposesForAccessoryRole(device, configuredExposes, AIR_QUALITY_ACCESSORY_ROLE).map((entry) => entry.name);
+
+    expect(primaryNames).toContain('fan');
+    expect(primaryNames).toContain('replace_filter');
+    expect(primaryNames).not.toContain('pm25');
+    expect(primaryNames).not.toContain('air_quality');
+    expect(sensorNames).toEqual(['pm25', 'air_quality']);
   });
 
   test('does not split unrelated fan devices', () => {

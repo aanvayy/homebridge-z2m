@@ -167,6 +167,7 @@ export interface ServiceHandlerContainer {
 
   checkNoCharacteristicUpdates(): ServiceHandlerContainer;
   callAndCheckHomeKitSetCallback(identifier: string, setValue: CharacteristicValue): ServiceHandlerContainer;
+  callAndCheckHomeKitSetCallbackError(identifier: string, setValue: CharacteristicValue, message: string): ServiceHandlerContainer;
 
   getCharacteristicMock(identifier: string): MockProxy<Characteristic> & Characteristic;
   prepareGetCharacteristicMock(property: string): void;
@@ -288,6 +289,24 @@ class ServiceHandlerTestData implements ServiceHandlerContainer {
     mapping.setFunction(setValue, callbackMock);
 
     expect(callbackMock).toHaveBeenCalledTimes(1).toHaveBeenCalledWith(null);
+
+    return this;
+  }
+
+  callAndCheckHomeKitSetCallbackError(identifier: string, setValue: CharacteristicValue, message: string): ServiceHandlerContainer {
+    expect(this.characteristics.has(identifier)).toBeTruthy();
+    const mapping = this.characteristics.get(identifier);
+    if (mapping?.setFunction === undefined) {
+      throw new Error(`No set callback for identifier ${identifier} found.`);
+    }
+
+    const callbackMock = vi.fn();
+    mapping.setFunction(setValue, callbackMock);
+
+    expect(callbackMock).toHaveBeenCalledTimes(1);
+    const error = callbackMock.mock.calls[0][0];
+    expect(error).toBeInstanceOf(Error);
+    expect(error.message).toBe(message);
 
     return this;
   }
@@ -587,6 +606,13 @@ export class ServiceHandlersTestHarness {
     expect(handler).toBeDefined();
     handler?.callAndCheckHomeKitSetCallback(identifier, setValue);
     this.checkSetDataQueued(expectedData);
+  }
+
+  checkHomeKitUpdateRejected(serviceIdentifier: ServiceIdentifier, identifier: string, setValue: CharacteristicValue, message: string) {
+    const handler = this.handlers.get(this.extractServiceId(serviceIdentifier));
+    expect(handler).toBeDefined();
+    handler?.callAndCheckHomeKitSetCallbackError(identifier, setValue, message);
+    this.checkNoSetDataQueued();
   }
 
   checkSetDataQueued(expectedData: unknown) {

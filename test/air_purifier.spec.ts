@@ -120,5 +120,81 @@ describe('Air Purifier', () => {
       harness.clearMocks();
       harness.checkHomeKitUpdateWithSingleValue(hap.Service.AirPurifier, 'fan_mode_speed', 67, '6', 'fan_mode');
     });
+
+    test('Manual restores the last speed after Off', () => {
+      harness.checkUpdateState(
+        '{"fan_mode":"2"}',
+        hap.Service.AirPurifier,
+        new Map<WithUUID<new () => Characteristic> | string, CharacteristicValue>([
+          [hap.Characteristic.TargetAirPurifierState, hap.Characteristic.TargetAirPurifierState.MANUAL],
+          [hap.Characteristic.RotationSpeed, 22],
+        ]),
+        false
+      );
+      harness.clearMocks();
+      harness.checkSingleUpdateState(
+        '{"fan_mode":"off"}',
+        hap.Service.AirPurifier,
+        hap.Characteristic.TargetAirPurifierState,
+        hap.Characteristic.TargetAirPurifierState.MANUAL
+      );
+      harness.clearMocks();
+      harness.checkHomeKitUpdateWithSingleValue(hap.Service.AirPurifier, 'fan_mode', hap.Characteristic.TargetAirPurifierState.MANUAL, '2');
+    });
+
+    test('Rejects target-state writes when mode is read-only', () => {
+      const readOnlyExposes = structuredClone(deviceExposes);
+      const fan = readOnlyExposes.find((entry) => entry.name === 'fan');
+      const mode = fan !== undefined && 'features' in fan ? fan.features.find((entry) => entry.name === 'mode') : undefined;
+      if (mode !== undefined) {
+        mode.access = 1;
+      }
+
+      harness = new ServiceHandlersTestHarness();
+      harness
+        .getOrAddHandler(hap.Service.AirPurifier)
+        .addExpectedCharacteristic('fan_state', hap.Characteristic.Active, true)
+        .addExpectedCharacteristic('fan_state_current', hap.Characteristic.CurrentAirPurifierState, false, 'fan_state')
+        .addExpectedCharacteristic('fan_mode', hap.Characteristic.TargetAirPurifierState, true);
+      harness
+        .getOrAddHandler(hap.Service.FilterMaintenance, 'replace_filter', filterServiceId)
+        .addExpectedCharacteristic('replace_filter', hap.Characteristic.FilterChangeIndication);
+      harness.prepareCreationMocks();
+      harness.callCreators(readOnlyExposes);
+      harness.checkCreationExpectations();
+      harness.checkHomeKitUpdateRejected(
+        hap.Service.AirPurifier,
+        'fan_mode',
+        hap.Characteristic.TargetAirPurifierState.AUTO,
+        'Changing the target state is not supported for this device'
+      );
+    });
+  });
+
+  test.each(['E2007', 'E3007'])('Recognizes %s without filter status', (model) => {
+    const exposes = loadExposesFromFile('ikea/e2007.json').filter(
+      (entry) => !['replace_filter', 'pm25', 'air_quality'].includes(entry.name ?? '')
+    );
+    const harness = new ServiceHandlersTestHarness();
+    harness.accessoryMock.matchesDeviceModel.mockImplementation((...models: string[]) => models.includes(model));
+    harness
+      .getOrAddHandler(hap.Service.AirPurifier)
+      .addExpectedCharacteristic('fan_state', hap.Characteristic.Active, true)
+      .addExpectedCharacteristic('fan_state_current', hap.Characteristic.CurrentAirPurifierState, false, 'fan_state')
+      .addExpectedCharacteristic('fan_mode', hap.Characteristic.TargetAirPurifierState, true)
+      .addExpectedCharacteristic('fan_mode_speed', hap.Characteristic.RotationSpeed, true, 'fan_mode');
+    harness.prepareCreationMocks();
+    harness.callCreators(exposes);
+    harness.checkCreationExpectations();
+  });
+
+  test('Does not classify an unrelated fan as an air purifier', () => {
+    const exposes = loadExposesFromFile('ikea/e2007.json').filter(
+      (entry) => !['replace_filter', 'pm25', 'air_quality'].includes(entry.name ?? '')
+    );
+    const harness = new ServiceHandlersTestHarness();
+    harness.accessoryMock.matchesDeviceModel.mockReturnValue(false);
+    harness.callCreators(exposes);
+    harness.checkCreationExpectations();
   });
 });

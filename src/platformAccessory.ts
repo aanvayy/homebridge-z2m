@@ -8,7 +8,7 @@ import { hap } from './hap';
 import { sanitizeAccessoryName, sanitizeAndFilterExposesEntries } from './helpers';
 import { BasicLogger } from './logger';
 import { Zigbee2mqttPlatform } from './platform';
-import { AIR_QUALITY_ACCESSORY_ROLE } from './purifierAccessorySplit';
+import { AIR_QUALITY_ACCESSORY_ROLE, exposesForAccessoryRole } from './purifierAccessorySplit';
 import { ExtendedTimer } from './timer';
 import {
   DeviceListEntry,
@@ -41,6 +41,11 @@ export class Zigbee2mqttAccessory implements BasicAccessory {
   get displayName(): string {
     const sourceName = this.accessory.context.device.friendly_name;
     return this.accessoryRole === AIR_QUALITY_ACCESSORY_ROLE ? `${sourceName} Air Quality` : sourceName;
+  }
+
+  matchesDeviceModel(...models: string[]): boolean {
+    const definition = this.accessory.context.device.definition;
+    return isDeviceDefinition(definition) && definition.model !== undefined && models.includes(definition.model);
   }
 
   get accessoryRole(): string | undefined {
@@ -397,15 +402,20 @@ export class Zigbee2mqttAccessory implements BasicAccessory {
   }
 
   updateDeviceInformation(info: DeviceListEntry | undefined, force_update = false) {
-    // Overwrite exposes information if available in configuration
-    if (
-      info?.definition !== undefined &&
-      info.definition !== null &&
-      isDeviceConfiguration(this.additionalConfig) &&
-      this.additionalConfig.exposes !== undefined &&
-      this.additionalConfig.exposes.length > 0
-    ) {
-      info.definition.exposes = this.additionalConfig.exposes;
+    if (info !== undefined && isDeviceDefinition(info.definition)) {
+      const configuredExposes =
+        isDeviceConfiguration(this.additionalConfig) &&
+        this.additionalConfig.exposes !== undefined &&
+        this.additionalConfig.exposes.length > 0
+          ? this.additionalConfig.exposes
+          : info.definition.exposes;
+      info = {
+        ...info,
+        definition: {
+          ...info.definition,
+          exposes: exposesForAccessoryRole(info, configuredExposes, this.accessoryRole),
+        },
+      };
     }
 
     // Filter/sanitize exposes information

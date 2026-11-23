@@ -18,9 +18,7 @@ export function deviceForAccessoryRole(device: DeviceListEntry, role?: string): 
     return device;
   }
 
-  const exposes = device.definition.exposes.filter((expose) =>
-    role === AIR_QUALITY_ACCESSORY_ROLE ? isAirQualityExpose(expose) : !isAirQualityExpose(expose)
-  );
+  const exposes = exposesForAccessoryRole(device, device.definition.exposes, role);
 
   return {
     ...device,
@@ -29,6 +27,14 @@ export function deviceForAccessoryRole(device: DeviceListEntry, role?: string): 
       exposes,
     },
   };
+}
+
+export function exposesForAccessoryRole(device: DeviceListEntry, exposes: ExposesEntry[], role?: string): ExposesEntry[] {
+  if (!isDeviceDefinition(device.definition) || !STARKVIND_MODELS.has(device.definition.model ?? '')) {
+    return exposes;
+  }
+
+  return exposes.filter((expose) => (role === AIR_QUALITY_ACCESSORY_ROLE ? isAirQualityExpose(expose) : !isAirQualityExpose(expose)));
 }
 
 function isAirQualityExpose(expose: ExposesEntry): boolean {

@@ -21,7 +21,9 @@ import { CharacteristicMonitor, MappingCharacteristicMonitor, NumericTransformCh
 
 export class AirPurifierCreator implements ServiceCreator {
   createServicesFromExposes(accessory: BasicAccessory, exposes: ExposesEntry[]): void {
-    const hasPurifierSignal = exposes.some((entry) => ['pm25', 'air_quality', 'replace_filter'].includes(entry.name ?? ''));
+    const hasPurifierSignal =
+      accessory.matchesDeviceModel('E2007', 'E3007') ||
+      exposes.some((entry) => ['pm25', 'air_quality', 'replace_filter'].includes(entry.name ?? ''));
     if (!hasPurifierSignal) {
       return;
     }
@@ -109,7 +111,7 @@ class AirPurifierHandler implements ServiceHandler {
     this.modeValues = this.modeExpose?.values ?? [];
     this.numericModes = this.modeValues.filter((v) => /^\d+$/.test(v));
     this.supportsAuto = this.modeValues.includes('auto');
-    this.supportsManual = this.modeValues.some((v) => v !== 'auto');
+    this.supportsManual = this.modeValues.some((v) => v !== 'auto' && v !== 'off');
     this.lastManualMode = this.getDefaultManualMode();
 
     this.mainCharacteristics = [getOrAddCharacteristic(this.service, hap.Characteristic.Active).on('set', this.handleSetActive.bind(this))];
@@ -226,7 +228,7 @@ class AirPurifierHandler implements ServiceHandler {
   updateState(state: Record<string, unknown>): void {
     if (this.modeExpose !== undefined) {
       const modeValue = state[this.modeExpose.property];
-      if (typeof modeValue === 'string' && modeValue !== 'auto' && this.modeValues.includes(modeValue)) {
+      if (typeof modeValue === 'string' && modeValue !== 'auto' && modeValue !== 'off' && this.modeValues.includes(modeValue)) {
         this.lastManualMode = modeValue;
       }
     }
@@ -238,8 +240,7 @@ class AirPurifierHandler implements ServiceHandler {
   }
 
   private getDefaultManualMode(): string | undefined {
-    const bestDefault = this.numericModes[0] ?? this.modeValues.find((v) => v !== 'auto' && v !== 'off');
-    return bestDefault ?? this.modeValues.find((v) => v !== 'auto');
+    return this.numericModes[0] ?? this.modeValues.find((v) => v !== 'auto' && v !== 'off');
   }
 
   private handleSetActive(value: CharacteristicValue, callback: CharacteristicSetCallback): void {
@@ -251,19 +252,21 @@ class AirPurifierHandler implements ServiceHandler {
 
   private handleSetTargetState(value: CharacteristicValue, callback: CharacteristicSetCallback): void {
     if (this.modeExpose === undefined || !exposesCanBeSet(this.modeExpose)) {
-      callback(null);
+      callback(new Error('Changing the target state is not supported for this device'));
       return;
     }
 
     const data = {};
-    if (value === hap.Characteristic.TargetAirPurifierState.AUTO && this.supportsAuto) {
+    if (value === hap.Characteristic.TargetAirPurifierState.AUTO) {
+      if (!this.supportsAuto) {
+        callback(new Error('Automatic mode is not supported for this device'));
+        return;
+      }
       data[this.modeExpose.property] = 'auto';
-    } else if (this.lastManualMode !== undefined) {
+    } else if (value === hap.Characteristic.TargetAirPurifierState.MANUAL && this.lastManualMode !== undefined) {
       data[this.modeExpose.property] = this.lastManualMode;
-    } else if (this.modeValues.includes('off')) {
-      data[this.modeExpose.property] = 'off';
     } else {
-      callback(null);
+      callback(new Error('Manual mode is not supported for this device'));
       return;
     }
     this.accessory.queueDataForSetAction(data);
