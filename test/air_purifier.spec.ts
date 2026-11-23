@@ -196,5 +196,6 @@ describe('Air Purifier', () => {
     harness.accessoryMock.matchesDeviceModel.mockReturnValue(false);
     harness.callCreators(exposes);
     harness.checkCreationExpectations();
+    expect(harness.accessoryMock.isServiceHandlerIdKnown).not.toHaveBeenCalledWith(hap.Service.AirPurifier.UUID);
   });
 });

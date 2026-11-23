@@ -468,7 +468,7 @@ export class Zigbee2mqttPlatform implements DynamicPlatformPlugin {
       const sourceDevice = foundIndex >= 0 ? this.lastReceivedDevices[foundIndex] : undefined;
       const roleStillApplies =
         this.accessories[i].accessoryRole !== AIR_QUALITY_ACCESSORY_ROLE ||
-        (sourceDevice !== undefined && shouldSplitStarkvindAirQuality(sourceDevice));
+        (sourceDevice !== undefined && shouldSplitStarkvindAirQuality(sourceDevice, this.getEffectiveExposes(sourceDevice)));
       if (
         (foundIndex < 0 && foundGroupIndex < 0) ||
         this.isDeviceExcluded(this.accessories[i].accessory.context.device) ||
@@ -603,14 +603,25 @@ export class Zigbee2mqttPlatform implements DynamicPlatformPlugin {
     if (!isDeviceDefinition(device.definition) || this.isDeviceExcluded(device)) {
       return;
     }
-    this.createOrUpdateAccessoryForRole(device);
-    if (shouldSplitStarkvindAirQuality(device)) {
-      this.createOrUpdateAccessoryForRole(device, AIR_QUALITY_ACCESSORY_ROLE);
+    const effectiveExposes = this.getEffectiveExposes(device);
+    this.createOrUpdateAccessoryForRole(device, undefined, effectiveExposes);
+    if (shouldSplitStarkvindAirQuality(device, effectiveExposes)) {
+      this.createOrUpdateAccessoryForRole(device, AIR_QUALITY_ACCESSORY_ROLE, effectiveExposes);
     }
   }
 
-  private createOrUpdateAccessoryForRole(device: DeviceListEntry, role?: string) {
-    const roleDevice = deviceForAccessoryRole(device, role);
+  private getEffectiveExposes(device: DeviceListEntry): ExposesEntry[] {
+    if (!isDeviceDefinition(device.definition)) {
+      return [];
+    }
+    const additionalConfig = this.getAdditionalConfigForDevice(device);
+    return isDeviceConfiguration(additionalConfig) && additionalConfig.exposes !== undefined && additionalConfig.exposes.length > 0
+      ? additionalConfig.exposes
+      : device.definition.exposes;
+  }
+
+  private createOrUpdateAccessoryForRole(device: DeviceListEntry, role: string | undefined, effectiveExposes: ExposesEntry[]) {
+    const roleDevice = deviceForAccessoryRole(device, role, effectiveExposes);
     const baseUuidInput = isDeviceListEntryForGroup(device) ? `group-${device.group_id}` : device.ieee_address;
     const uuid_input = role === undefined ? baseUuidInput : `${baseUuidInput}-${role}`;
     const uuid = this.api.hap.uuid.generate(uuid_input);

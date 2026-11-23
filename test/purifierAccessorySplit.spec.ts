@@ -50,17 +50,23 @@ describe('STARKVIND accessory split', () => {
   });
 
   test('keeps configured exposes separated by accessory role', () => {
-    const device = starkvindDevice(loadExposesFromFile('ikea/e2007.json'));
-    const configuredExposes = device.definition?.exposes ?? [];
+    const configuredExposes = loadExposesFromFile('ikea/e2007.json');
+    const discoveredExposes = configuredExposes.filter((entry) => !['pm25', 'air_quality'].includes(entry.name ?? ''));
+    const device = starkvindDevice(discoveredExposes);
 
     const primaryNames = exposesForAccessoryRole(device, configuredExposes).map((entry) => entry.name);
     const sensorNames = exposesForAccessoryRole(device, configuredExposes, AIR_QUALITY_ACCESSORY_ROLE).map((entry) => entry.name);
 
+    expect(shouldSplitStarkvindAirQuality(device)).toBe(false);
+    expect(shouldSplitStarkvindAirQuality(device, configuredExposes)).toBe(true);
     expect(primaryNames).toContain('fan');
     expect(primaryNames).toContain('replace_filter');
     expect(primaryNames).not.toContain('pm25');
     expect(primaryNames).not.toContain('air_quality');
     expect(sensorNames).toEqual(['pm25', 'air_quality']);
+    expect(deviceForAccessoryRole(device, AIR_QUALITY_ACCESSORY_ROLE, configuredExposes).definition?.exposes).toEqual(
+      exposesForAccessoryRole(device, configuredExposes, AIR_QUALITY_ACCESSORY_ROLE)
+    );
   });
 
   test('does not split unrelated fan devices', () => {
@@ -70,5 +76,14 @@ describe('STARKVIND accessory split', () => {
     }
     expect(shouldSplitStarkvindAirQuality(device)).toBe(false);
     expect(deviceForAccessoryRole(device, AIR_QUALITY_ACCESSORY_ROLE)).toBe(device);
+  });
+
+  test('keeps air-quality exposes on the primary accessory when PM2.5 is unavailable', () => {
+    const exposes = loadExposesFromFile('ikea/e2007.json').filter((entry) => entry.name !== 'pm25');
+    const device = starkvindDevice(exposes);
+
+    expect(shouldSplitStarkvindAirQuality(device)).toBe(false);
+    expect(deviceForAccessoryRole(device)).toBe(device);
+    expect(exposesForAccessoryRole(device, exposes).map((entry) => entry.name)).toContain('air_quality');
   });
 });
