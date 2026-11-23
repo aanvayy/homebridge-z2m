@@ -402,21 +402,7 @@ export class Zigbee2mqttAccessory implements BasicAccessory {
   }
 
   updateDeviceInformation(info: DeviceListEntry | undefined, force_update = false) {
-    if (info !== undefined && isDeviceDefinition(info.definition)) {
-      const configuredExposes =
-        isDeviceConfiguration(this.additionalConfig) &&
-        this.additionalConfig.exposes !== undefined &&
-        this.additionalConfig.exposes.length > 0
-          ? this.additionalConfig.exposes
-          : info.definition.exposes;
-      info = {
-        ...info,
-        definition: {
-          ...info.definition,
-          exposes: exposesForAccessoryRole(info, configuredExposes, this.accessoryRole),
-        },
-      };
-    }
+    info = this.applyAccessoryRoleToExposes(info);
 
     // Filter/sanitize exposes information
     if (info?.definition?.exposes !== undefined) {
@@ -463,6 +449,27 @@ export class Zigbee2mqttAccessory implements BasicAccessory {
       }
     }
     this.platform.api.updatePlatformAccessories([this.accessory]);
+  }
+
+  private applyAccessoryRoleToExposes(info: DeviceListEntry | undefined): DeviceListEntry | undefined {
+    if (info === undefined || !isDeviceDefinition(info.definition)) {
+      return info;
+    }
+
+    const configuredExposes =
+      isDeviceConfiguration(this.additionalConfig) &&
+      this.additionalConfig.exposes !== undefined &&
+      this.additionalConfig.exposes.length > 0
+        ? this.additionalConfig.exposes
+        : info.definition.exposes;
+
+    return {
+      ...info,
+      definition: {
+        ...info.definition,
+        exposes: exposesForAccessoryRole(info, configuredExposes, this.accessoryRole),
+      },
+    };
   }
 
   private cleanStaleServices(): void {
